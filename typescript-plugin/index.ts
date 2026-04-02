@@ -4,45 +4,18 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import { resolveCtImport } from './resolveCtImport';
-
-const URL_REGEX = /^(?:https?:\/\/)?([^/]+\.[^/]+)\/([^/]+)\/([^/@]+)@(.+)$/;
+import { isPackageURL, resolveURLImport } from './resolveUrlImport';
 
 interface PluginConfig {
   valuesDeclarationPath?: string;
 }
-
-const parsePackageURL = (url: string) => {
-  const m = url.match(URL_REGEX);
-  return m ? { host: m[1], owner: m[2], repo: m[3], version: m[4] } : null;
-};
-
-const getCacheDir = (): string =>
-  path.join(os.homedir(), '.ct', 'cache');
-
-const resolveURLImport = (url: string): string | null => {
-  const ref = parsePackageURL(url);
-  if (!ref) return null;
-
-  const pkgDir = path.join(
-    getCacheDir(),
-    ref.host,
-    ref.owner,
-    `${ref.repo}@${ref.version}`,
-  );
-
-  for (const candidate of ['index.ts', 'index.d.ts', 'index.js']) {
-    const p = path.join(pkgDir, candidate);
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
-};
 
 const resolveExtension = (
   tsModule: typeof ts,
   fileName: string,
 ): ts.Extension => {
   if (fileName.endsWith('.d.ts')) return tsModule.Extension.Dts;
-  if (fileName.endsWith('.ts')) return tsModule.Extension.Ts;
+  if (fileName.endsWith('.ts') || fileName.endsWith('.ct')) return tsModule.Extension.Ts;
   return tsModule.Extension.Js;
 };
 
@@ -125,7 +98,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
             };
           }
 
-          if (!URL_REGEX.test(name)) return baseResults[i];
+          if (!isPackageURL(name)) return baseResults[i];
 
           const resolved = resolveURLImport(name);
           if (!resolved) {
@@ -178,7 +151,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
             };
           }
 
-          if (!URL_REGEX.test(name)) return undefined;
+          if (!isPackageURL(name)) return undefined;
 
           const resolved = resolveURLImport(name);
           if (!resolved) {

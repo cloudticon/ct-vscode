@@ -59,7 +59,8 @@
   "scripts": {
     "compile": "node build.mjs",
     "watch": "node build.mjs --watch",
-    "package": "npm run compile && vsce package --allow-missing-repository"
+    "package": "npm run compile && vsce package --allow-missing-repository",
+    "test": "vitest run"
   },
   "dependencies": {
     "@vscode/vsce": "^3.7.1",
@@ -70,6 +71,7 @@
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.80.0",
     "esbuild": "^0.25.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.2"
   }
 }

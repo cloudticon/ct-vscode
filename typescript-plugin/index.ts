@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as crypto from 'crypto';
+import { resolveCtImport } from './resolveCtImport';
 
 const URL_REGEX = /^(?:https?:\/\/)?([^/]+\.[^/]+)\/([^/]+)\/([^/@]+)@(.+)$/;
 
@@ -111,6 +112,19 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         return moduleLiterals.map((literal: any, i: number) => {
           const name: string = literal.text;
           if (baseResults[i]?.resolvedModule) return baseResults[i];
+
+          const ctResolved = resolveCtImport(name, containingFile);
+          if (ctResolved) {
+            logger.info(`[ct] Resolved .ct import: ${name} -> ${ctResolved}`);
+            return {
+              resolvedModule: {
+                resolvedFileName: ctResolved,
+                isExternalLibraryImport: false,
+                extension: tsModule.Extension.Ts,
+              },
+            };
+          }
+
           if (!URL_REGEX.test(name)) return baseResults[i];
 
           const resolved = resolveURLImport(name);
@@ -153,6 +167,17 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
 
         return moduleNames.map((name, i) => {
           if (baseResults[i]) return baseResults[i];
+
+          const ctResolved = resolveCtImport(name, containingFile);
+          if (ctResolved) {
+            logger.info(`[ct] Resolved .ct import: ${name} -> ${ctResolved}`);
+            return {
+              resolvedFileName: ctResolved,
+              isExternalLibraryImport: false,
+              extension: tsModule.Extension.Ts,
+            };
+          }
+
           if (!URL_REGEX.test(name)) return undefined;
 
           const resolved = resolveURLImport(name);

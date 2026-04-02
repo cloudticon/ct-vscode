@@ -1,0 +1,10 @@
+.github/**
+src/**
+typescript-plugin/**
+build.mjs
+tsconfig.json
+**/*.ts
+**/*.map
+.gitignore
+node_modules/**
+!node_modules/ct-typescript-plugin/**

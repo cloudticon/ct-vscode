@@ -1,0 +1,41 @@
+name: Release Extension
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish to VS Code Marketplace & GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run compile
+
+      - name: Package VSIX
+        run: npx vsce package --allow-missing-repository --pre-release --out cloudticon-ct.vsix
+
+      - name: Publish to VS Code Marketplace
+        run: npx vsce publish --allow-missing-repository --pre-release --packagePath cloudticon-ct.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: cloudticon-ct.vsix
+          generate_release_notes: true
+          prerelease: true

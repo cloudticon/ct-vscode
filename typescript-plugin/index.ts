@@ -1,13 +1,11 @@
 import type * as ts from 'typescript/lib/tsserverlibrary';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as os from 'os';
-import * as crypto from 'crypto';
 import { resolveCtImport } from './resolveCtImport';
 import { isPackageURL, resolveURLImport } from './resolveUrlImport';
 
 interface PluginConfig {
-  valuesDeclarationPath?: string;
+  typesDir?: string;
 }
 
 const resolveExtension = (
@@ -15,51 +13,51 @@ const resolveExtension = (
   fileName: string,
 ): ts.Extension => {
   if (fileName.endsWith('.d.ts')) return tsModule.Extension.Dts;
-  if (fileName.endsWith('.ts') || fileName.endsWith('.ct')) return tsModule.Extension.Ts;
+  if (fileName.endsWith('.ts') || fileName.endsWith('.ct'))
+    return tsModule.Extension.Ts;
   return tsModule.Extension.Js;
 };
 
-const discoverValuesPath = (projectDir: string): string | undefined => {
-  const hash = crypto
-    .createHash('md5')
-    .update(projectDir)
-    .digest('hex')
-    .slice(0, 12);
-  const p = path.join(os.homedir(), '.ct', 'types', hash, 'values.d.ts');
-  return fs.existsSync(p) ? p : undefined;
+const collectDtsFiles = (dir: string): string[] => {
+  try {
+    return fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith('.d.ts'))
+      .map((f) => path.join(dir, f));
+  } catch {
+    return [];
+  }
 };
 
 function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
   const tsModule = modules.typescript;
   let config: PluginConfig = {};
 
+  const getTypeFiles = (): string[] =>
+    config.typesDir ? collectDtsFiles(config.typesDir) : [];
+
   const create = (info: ts.server.PluginCreateInfo): ts.LanguageService => {
     const logger = info.project.projectService.logger;
-    logger.info('[ct] TypeScript plugin loaded (v2 — resolveModuleNameLiterals)');
+    logger.info('[ct] TypeScript plugin loaded');
 
     config = info.config || {};
-
-    const projectDir = info.project.getCurrentDirectory();
-    if (!config.valuesDeclarationPath) {
-      config.valuesDeclarationPath = discoverValuesPath(projectDir);
-      logger.info(`[ct] Auto-discovered values path: ${config.valuesDeclarationPath ?? 'none'}`);
-    }
 
     const host = info.languageServiceHost;
 
     const origGetScriptFileNames = host.getScriptFileNames.bind(host);
     host.getScriptFileNames = () => {
       const files = origGetScriptFileNames();
-      if (config.valuesDeclarationPath && fs.existsSync(config.valuesDeclarationPath)) {
-        if (!files.includes(config.valuesDeclarationPath)) {
-          logger.info(`[ct] Injecting values.d.ts into root files: ${config.valuesDeclarationPath}`);
-          return [...files, config.valuesDeclarationPath];
-        }
+      const extra = getTypeFiles().filter((f) => !files.includes(f));
+      if (extra.length > 0) {
+        logger.info(`[ct] Injecting type files: ${extra.join(', ')}`);
+        return [...files, ...extra];
       }
       return files;
     };
 
-    const origResolveLiterals = (host as any).resolveModuleNameLiterals?.bind(host);
+    const origResolveLiterals = (
+      host as any
+    ).resolveModuleNameLiterals?.bind(host);
     const origResolve = host.resolveModuleNames?.bind(host);
 
     if (origResolveLiterals) {
@@ -180,14 +178,8 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
     return proxy;
   };
 
-  const getExternalFiles = (
-    _project: ts.server.Project,
-  ): string[] => {
-    if (config.valuesDeclarationPath && fs.existsSync(config.valuesDeclarationPath)) {
-      return [config.valuesDeclarationPath];
-    }
-    return [];
-  };
+  const getExternalFiles = (_project: ts.server.Project): string[] =>
+    getTypeFiles();
 
   const onConfigurationChanged = (newConfig: PluginConfig): void => {
     config = newConfig || {};

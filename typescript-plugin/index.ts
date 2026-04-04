@@ -1,8 +1,8 @@
-import type * as ts from 'typescript/lib/tsserverlibrary';
-import * as path from 'path';
-import * as fs from 'fs';
-import { resolveCtImport } from './resolveCtImport';
-import { isPackageURL, resolveURLImport } from './resolveUrlImport';
+import * as fs from "fs";
+import * as path from "path";
+import type * as ts from "typescript/lib/tsserverlibrary";
+import { resolveCtImport } from "./resolveCtImport";
+import { isPackageURL, resolveURLImport } from "./resolveUrlImport";
 
 interface PluginConfig {
   typesDir?: string;
@@ -12,8 +12,8 @@ const resolveExtension = (
   tsModule: typeof ts,
   fileName: string,
 ): ts.Extension => {
-  if (fileName.endsWith('.d.ts')) return tsModule.Extension.Dts;
-  if (fileName.endsWith('.ts') || fileName.endsWith('.ct'))
+  if (fileName.endsWith(".d.ts")) return tsModule.Extension.Dts;
+  if (fileName.endsWith(".ts") || fileName.endsWith(".ct"))
     return tsModule.Extension.Ts;
   return tsModule.Extension.Js;
 };
@@ -22,7 +22,7 @@ const collectDtsFiles = (dir: string): string[] => {
   try {
     return fs
       .readdirSync(dir)
-      .filter((f) => f.endsWith('.d.ts'))
+      .filter((f) => f.endsWith(".d.ts"))
       .map((f) => path.join(dir, f));
   } catch {
     return [];
@@ -38,7 +38,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
 
   const create = (info: ts.server.PluginCreateInfo): ts.LanguageService => {
     const logger = info.project.projectService.logger;
-    logger.info('[ct] TypeScript plugin loaded');
+    logger.info("[ct] TypeScript plugin loaded");
 
     config = info.config || {};
 
@@ -49,19 +49,19 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
       const files = origGetScriptFileNames();
       const extra = getTypeFiles().filter((f) => !files.includes(f));
       if (extra.length > 0) {
-        logger.info(`[ct] Injecting type files: ${extra.join(', ')}`);
+        logger.info(`[ct] Injecting type files: ${extra.join(", ")}`);
         return [...files, ...extra];
       }
       return files;
     };
 
-    const origResolveLiterals = (
-      host as any
-    ).resolveModuleNameLiterals?.bind(host);
+    const origResolveLiterals = (host as any).resolveModuleNameLiterals?.bind(
+      host,
+    );
     const origResolve = host.resolveModuleNames?.bind(host);
 
     if (origResolveLiterals) {
-      logger.info('[ct] Hooking resolveModuleNameLiterals (TS 5+)');
+      logger.info("[ct] Hooking resolveModuleNameLiterals (TS 5+)");
 
       (host as any).resolveModuleNameLiterals = (
         moduleLiterals: any[],
@@ -115,7 +115,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         });
       };
     } else {
-      logger.info('[ct] Hooking resolveModuleNames (legacy)');
+      logger.info("[ct] Hooking resolveModuleNames (legacy)");
 
       host.resolveModuleNames = (
         moduleNames: string[],

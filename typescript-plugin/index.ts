@@ -32,12 +32,15 @@ const collectDtsFiles = (dir: string): string[] => {
 function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
   const tsModule = modules.typescript;
   let config: PluginConfig = {};
+  let activeProject: ts.server.Project | undefined;
+  let logger: ts.server.Logger | undefined;
 
   const getTypeFiles = (): string[] =>
     config.typesDir ? collectDtsFiles(config.typesDir) : [];
 
   const create = (info: ts.server.PluginCreateInfo): ts.LanguageService => {
-    const logger = info.project.projectService.logger;
+    logger = info.project.projectService.logger;
+    activeProject = info.project;
     logger.info("[ct] TypeScript plugin loaded");
 
     config = info.config || {};
@@ -183,6 +186,20 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
 
   const onConfigurationChanged = (newConfig: PluginConfig): void => {
     config = newConfig || {};
+    if (!activeProject) return;
+
+    setTimeout(() => {
+      try {
+        // Refresh project graph so TS picks up changed injected .d.ts files.
+        (activeProject as any).updateGraph?.();
+        (activeProject as any).refreshDiagnostics?.();
+        logger?.info("[ct] Project graph refreshed after config update");
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "unknown refresh error";
+        logger?.info(`[ct] Failed to refresh project after config update: ${message}`);
+      }
+    }, 0);
   };
 
   return { create, getExternalFiles, onConfigurationChanged };

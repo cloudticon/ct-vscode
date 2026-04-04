@@ -1,4 +1,5 @@
 import * as cp from "child_process";
+import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
@@ -9,6 +10,25 @@ const DEBOUNCE_MS = 500;
 
 let log: vscode.OutputChannel;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+const typesFingerprintByFolder = new Map<string, string>();
+
+const computeTypesFingerprint = (typesDir: string): string => {
+  try {
+    const hash = crypto.createHash("sha256");
+    hash.update(typesDir);
+    const files = fs
+      .readdirSync(typesDir)
+      .filter((f) => f.endsWith(".d.ts"))
+      .sort();
+    for (const f of files) {
+      hash.update(f);
+      hash.update(fs.readFileSync(path.join(typesDir, f), "utf-8"));
+    }
+    return hash.digest("hex");
+  } catch {
+    return "";
+  }
+};
 
 const findCtBinary = (): string | undefined => {
   const cmd = process.platform === "win32" ? "where" : "which";
@@ -105,21 +125,24 @@ const scheduleSyncAll = (ctPath: string | undefined): void => {
 const syncAll = async (ctPath: string | undefined): Promise<void> => {
   if (!ctPath) return;
 
-  let configured = false;
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     const dir = folder.uri.fsPath;
     log.appendLine(`[ct] Running ct types for: ${dir}`);
 
     const typesDir = runCtTypes(ctPath, dir);
-    if (typesDir) {
-      log.appendLine(`[ct] Types generated at: ${typesDir}`);
-      await configurePlugin(typesDir);
-      configured = true;
-    }
-  }
+    if (!typesDir) continue;
 
-  if (configured) {
-    await vscode.commands.executeCommand("typescript.restartTsServer");
+    const fingerprint = computeTypesFingerprint(typesDir);
+    const prev = typesFingerprintByFolder.get(dir);
+
+    if (fingerprint === prev) {
+      log.appendLine(`[ct] Types unchanged for ${dir}, skipping restart`);
+      continue;
+    }
+
+    log.appendLine(`[ct] Types changed at: ${typesDir}`);
+    typesFingerprintByFolder.set(dir, fingerprint);
+    await configurePlugin(typesDir);
   }
 };
 

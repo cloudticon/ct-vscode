@@ -46,13 +46,25 @@
           "Cloudticon Template",
           "ct"
         ],
+        "icon": {
+          "light": "./media/ct-file-icon.svg",
+          "dark": "./media/ct-file-icon.svg"
+        },
         "configuration": "./language-configuration.json"
       }
     ],
     "typescriptServerPlugins": [
       {
         "name": "ct-typescript-plugin",
-        "enableForWorkspaceTypeScriptVersions": true
+        "enableForWorkspaceTypeScriptVersions": true,
+        "languages": ["ct"]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ct",
+        "scopeName": "source.ct",
+        "path": "./syntaxes/ct.tmLanguage.json"
       }
     ]
   },

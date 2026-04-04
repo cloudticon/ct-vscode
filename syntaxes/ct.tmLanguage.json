@@ -1,0 +1,13 @@
+{
+  "scopeName": "source.ct",
+  "patterns": [
+    {
+      "begin": "\\A",
+      "end": "\\z",
+      "name": "source.ts",
+      "patterns": [
+        { "include": "source.ts" }
+      ]
+    }
+  ]
+}

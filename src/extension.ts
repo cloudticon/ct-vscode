@@ -3,10 +3,12 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
+import { runWithRetry } from "./retry";
 
 const PLUGIN_ID = "ct-typescript-plugin";
 const CT_BINARIES = ["ct", "ct-operator"] as const;
 const DEBOUNCE_MS = 500;
+const CONFIGURE_PLUGIN_RETRY_DELAYS_MS = [250, 750, 1_500] as const;
 
 let log: vscode.OutputChannel;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -71,12 +73,37 @@ const runCtTypes = (ctPath: string, dir: string): string | undefined => {
   }
 };
 
+const isCtDocument = (doc: vscode.TextDocument): boolean =>
+  doc.fileName.endsWith(".ct");
+
+const toErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+const isConfigurePluginUnsupported = (error: unknown): boolean => {
+  const message = toErrorMessage(error);
+  return (
+    /command .*_typescript\.configurePlugin.*not found/i.test(message) ||
+    /not available in this VS Code version/i.test(message)
+  );
+};
+
+const ctFileDecorationProvider: vscode.FileDecorationProvider = {
+  provideFileDecoration(uri) {
+    if (!uri.fsPath.endsWith(".ct")) return undefined;
+    return new vscode.FileDecoration("CT", "Cloudticon Template");
+  },
+};
+
 export async function activate(
   context: vscode.ExtensionContext,
 ): Promise<void> {
   log = vscode.window.createOutputChannel("Cloudticon CT");
   context.subscriptions.push(log);
   log.appendLine("[ct] Extension activating…");
+
+  context.subscriptions.push(
+    vscode.window.registerFileDecorationProvider(ctFileDecorationProvider),
+  );
 
   const ctPath = findCtBinary();
   if (!ctPath) {
@@ -89,10 +116,17 @@ export async function activate(
   }
 
   for (const doc of vscode.workspace.textDocuments) {
-    switchCtToTypeScript(doc);
+    await handleCtDocumentOpen(doc, ctPath);
   }
   context.subscriptions.push(
-    vscode.workspace.onDidOpenTextDocument(switchCtToTypeScript),
+    vscode.workspace.onDidOpenTextDocument((doc) => {
+      void handleCtDocumentOpen(doc, ctPath);
+    }),
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      if (editor && isCtDocument(editor.document)) {
+        scheduleSyncAll(ctPath);
+      }
+    }),
   );
 
   const watcher = vscode.workspace.createFileSystemWatcher(
@@ -111,10 +145,19 @@ export async function activate(
 }
 
 const switchCtToTypeScript = (doc: vscode.TextDocument): void => {
-  if (doc.fileName.endsWith(".ct") && doc.languageId !== "typescript") {
+  if (isCtDocument(doc) && doc.languageId !== "typescript") {
     log.appendLine(`[ct] Switching ${doc.fileName} to typescript`);
-    vscode.languages.setTextDocumentLanguage(doc, "typescript");
+    void vscode.languages.setTextDocumentLanguage(doc, "typescript");
   }
+};
+
+const handleCtDocumentOpen = async (
+  doc: vscode.TextDocument,
+  ctPath: string | undefined,
+): Promise<void> => {
+  if (!isCtDocument(doc)) return;
+  switchCtToTypeScript(doc);
+  scheduleSyncAll(ctPath);
 };
 
 const scheduleSyncAll = (ctPath: string | undefined): void => {
@@ -148,13 +191,37 @@ const syncAll = async (ctPath: string | undefined): Promise<void> => {
 
 const configurePlugin = async (typesDir: string): Promise<void> => {
   try {
-    await vscode.commands.executeCommand(
-      "_typescript.configurePlugin",
-      PLUGIN_ID,
-      { typesDir },
+    await runWithRetry(
+      () =>
+        Promise.resolve(
+          vscode.commands.executeCommand(
+            "_typescript.configurePlugin",
+            PLUGIN_ID,
+            { typesDir },
+          ),
+        ),
+      {
+        delaysMs: CONFIGURE_PLUGIN_RETRY_DELAYS_MS,
+        shouldRetry: (error) => !isConfigurePluginUnsupported(error),
+        onRetry: ({ attempt, delayMs, error }) => {
+          log.appendLine(
+            `[ct] configurePlugin retry ${attempt} in ${delayMs}ms: ${toErrorMessage(error)}`,
+          );
+        },
+      },
     );
-  } catch {
-    // _typescript.configurePlugin not available in this VS Code version
+    log.appendLine(`[ct] Configured TypeScript plugin: ${typesDir}`);
+  } catch (error) {
+    if (isConfigurePluginUnsupported(error)) {
+      log.appendLine(
+        "[ct] _typescript.configurePlugin not available in this VS Code version",
+      );
+      return;
+    }
+
+    log.appendLine(
+      `[ct] Failed to configure TypeScript plugin: ${toErrorMessage(error)}`,
+    );
   }
 };
 

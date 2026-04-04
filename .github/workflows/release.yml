@@ -26,10 +26,10 @@ jobs:
       - run: npm run compile
 
       - name: Package VSIX
-        run: npx vsce package --allow-missing-repository --pre-release --out cloudticon-ct.vsix
+        run: npx vsce package --allow-missing-repository --out cloudticon-ct.vsix
 
       - name: Publish to VS Code Marketplace
-        run: npx vsce publish --allow-missing-repository --pre-release --packagePath cloudticon-ct.vsix
+        run: npx vsce publish --allow-missing-repository --packagePath cloudticon-ct.vsix
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 

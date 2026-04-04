@@ -2,7 +2,7 @@
   "name": "cloudticon-ct",
   "displayName": "Cloudticon",
   "description": "TypeScript support for .ct (Cloudticon Template) files with URL imports and Values injection",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "publisher": "cloudticon",
   "icon": "media/ct-icon.png",
   "license": "MIT",
@@ -58,7 +58,9 @@
       {
         "name": "ct-typescript-plugin",
         "enableForWorkspaceTypeScriptVersions": true,
-        "languages": ["ct"]
+        "languages": [
+          "ct"
+        ]
       }
     ],
     "grammars": [
